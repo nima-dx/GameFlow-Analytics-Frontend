@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  streamlit-analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gameflow-dashboard-analytics
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount your local code for hot reload during development
+      - .:/app
+      # Mount Google Cloud credentials from your home directory
+      - ${HOME}/.gcp_keys/le-wagon-de-bootcamp.json:/app/credentials/gcp-key.json:ro
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-le-wagon-data-atelier}
+      - GCP_DATASET_ID=${GCP_DATASET_ID:-sales_mart}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+    command: poetry run streamlit run game_dashboard/game_analytics.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
+
+  # streamlit-advanced:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: gameflow-dashboard-advanced
+  #   ports:
+  #     - "8502:8501"
+  #   volumes:
+  #     # Mount your local code for hot reload during development
+  #     - .:/app
+  #     # Mount Google Cloud credentials from your home directory
+  #     - ${HOME}/.gcp_keys/le-wagon-de-bootcamp.json:/app/credentials/gcp-key.json:ro
+  #   environment:
+  #     - GCP_PROJECT_ID=${GCP_PROJECT_ID:-le-wagon-data-atelier}
+  #     - GCP_DATASET_ID=${GCP_DATASET_ID:-sales_mart}
+  #     - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
+  #   command: poetry run streamlit run game_dashboard/advanced.py --server.port=8501 --server.address=0.0.0.0
+  #   restart: unless-stopped
