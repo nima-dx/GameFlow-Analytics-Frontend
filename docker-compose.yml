@@ -17,7 +17,7 @@ services:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-le-wagon-data-atelier}
       - GCP_DATASET_ID=${GCP_DATASET_ID:-sales_mart}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-key.json
-    command: poetry run streamlit run game_dashboard/game_analytics.py --server.port=8501 --server.address=0.0.0.0
+    command: poetry run streamlit run game_dashboard/app.py --server.port=8501 --server.address=0.0.0.0
     restart: unless-stopped
 
   # streamlit-advanced:
