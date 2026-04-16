@@ -79,7 +79,8 @@ with c1:
             st.metric(top_scorer["player"], f'{top_scorer["goals"]} goals')
             st.caption(f'xG: {top_scorer["xg"]} | Assists: {top_scorer["assists"]}')
 
-    st.button("Go to Football →", key="go_football", on_click=lambda: st.switch_page("pages/1_football.py"))
+    if st.button("Go to Football →", key="go_football"):
+        st.switch_page("pages/1_football.py")
 
 with c2:
     st.markdown("#### Formula 1")

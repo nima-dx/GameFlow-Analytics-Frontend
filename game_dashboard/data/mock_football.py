@@ -70,3 +70,28 @@ def get_match_results():
         "goals_for": [2, 1, 3, 0, 2, 1, 4, 2, 1, 3],
         "goals_against": [1, 2, 1, 0, 2, 1, 2, 0, 1, 2],
     })
+
+def get_team_season_stats():
+    return pd.DataFrame({
+        "team": [
+            "Arsenal", "Arsenal", "Arsenal", "Arsenal",
+            "Chelsea", "Chelsea", "Chelsea", "Chelsea",
+            "Liverpool", "Liverpool", "Liverpool", "Liverpool",
+            "Man City", "Man City", "Man City", "Man City",
+            "Tottenham", "Tottenham", "Tottenham", "Tottenham",
+        ],
+        "year": [
+            2021, 2022, 2023, 2024,
+            2021, 2022, 2023, 2024,
+            2021, 2022, 2023, 2024,
+            2021, 2022, 2023, 2024,
+            2021, 2022, 2023, 2024,
+        ],
+        "points": [
+            61, 69, 84, 89,
+            67, 74, 44, 63,
+            69, 92, 82, 78,
+            86, 89, 91, 88,
+            62, 71, 66, 70,
+        ],
+    })

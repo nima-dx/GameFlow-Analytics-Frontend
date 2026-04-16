@@ -11,8 +11,9 @@ services:
     volumes:
       # Mount your local code for hot reload during development
       - .:/app
+      - /app/.venv
       # Mount Google Cloud credentials from your home directory
-      - ${HOME}/.gcp_keys/le-wagon-de-bootcamp.json:/app/credentials/gcp-key.json:ro
+      - ${HOME}/.gcp_keys/gameflow-team.json:/app/credentials/gcp-key.json:ro
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-le-wagon-data-atelier}
       - GCP_DATASET_ID=${GCP_DATASET_ID:-sales_mart}
