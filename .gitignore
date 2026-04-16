@@ -1,3 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variables
+.env
+
+# Local credentials / secrets
+credentials/
+
+# OS / editor junk
+.DS_Store
+*.swp
+
+# Build / docs (you already had some)
 database
 secrets.toml
 doctrees
