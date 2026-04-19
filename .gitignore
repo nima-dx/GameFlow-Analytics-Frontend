@@ -19,3 +19,4 @@ secrets.toml
 doctrees
 html
 *.gz
+.streamlit/secrets.toml
