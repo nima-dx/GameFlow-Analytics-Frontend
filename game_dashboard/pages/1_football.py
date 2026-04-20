@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 
 from data.bigquery_football import (
@@ -17,13 +18,17 @@ from data.bigquery_football import (
 )
 from components.charts import line_chart, bar_chart, scatter_chart
 
+
+st.set_page_config(page_title="Football Dashboard", layout="wide")
+
 st.markdown(
     """
     <style>
         .block-container {
             max-width: 100% !important;
-            padding-left: 3rem;
-            padding-right: 3rem;
+            padding-left: 2.5rem;
+            padding-right: 2.5rem;
+            padding-top: 1.5rem;
         }
     </style>
     """,
@@ -32,7 +37,9 @@ st.markdown(
 
 st.title("⚽ Football Dashboard")
 
+# -----------------------------------------------------------------------------
 # Sidebar filters
+# -----------------------------------------------------------------------------
 leagues = get_available_leagues()
 league = st.sidebar.selectbox("League", leagues)
 
@@ -41,7 +48,9 @@ season = st.sidebar.selectbox("Season", seasons)
 
 st.caption(f"League: {league} | Season: {season}")
 
-# KPIs
+# -----------------------------------------------------------------------------
+# KPI row
+# -----------------------------------------------------------------------------
 kpis = get_football_kpis(league, season)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Matches", kpis["matches"])
@@ -49,7 +58,9 @@ c2.metric("Goals", kpis["goals"])
 c3.metric("xG", kpis["xg"])
 c4.metric("Wins", kpis["wins"])
 
+# -----------------------------------------------------------------------------
 # Load datasets
+# -----------------------------------------------------------------------------
 team_stats_df = get_team_season_stats(league)
 players_df = get_player_stats(league, season)
 home_away_df = get_home_away_summary(league, season)
@@ -58,29 +69,98 @@ radar_df = get_team_radar_metrics(league, season)
 points_dist_df = get_points_distribution_data(league, season)
 bubble_df = get_bubble_chart_data(league, season)
 
-# Team form section
+# -----------------------------------------------------------------------------
+# First section: Team Form Momentum
+# -----------------------------------------------------------------------------
 st.divider()
-st.subheader("📈 Team Form")
+st.subheader("🔥 Team Form Momentum")
+st.caption("Per-match results with rolling form. Much more revealing than cumulative points.")
 
 if not team_stats_df.empty:
     available_teams = sorted(team_stats_df["team"].dropna().unique().tolist())
-    selected_team = st.selectbox("Choose a team", available_teams, key="selected_team_form")
+    selected_team = st.selectbox(
+        "Choose a team",
+        available_teams,
+        key="selected_team_form",
+    )
 
     form_df = get_team_form_data(league, season, selected_team)
 
     if not form_df.empty:
-        line_chart(
-            form_df,
-            x="matchday",
-            y="points",
-            title=f"{selected_team} - Cumulative Points",
+        summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+
+        total_points = int(form_df["points"].sum())
+        avg_points = round(form_df["points"].mean(), 2)
+        win_rate = round((form_df["result"] == "W").mean() * 100, 1)
+        goals_per_game = round(form_df["score"].mean(), 2)
+
+        summary_col1.metric("Total Points", total_points)
+        summary_col2.metric("Points / Match", avg_points)
+        summary_col3.metric("Win Rate", f"{win_rate}%")
+        summary_col4.metric("Goals / Match", goals_per_game)
+
+        color_map = {"W": "#16a34a", "D": "#f59e0b", "L": "#dc2626"}
+
+        fig_form = go.Figure()
+
+        for result in ["W", "D", "L"]:
+            result_df = form_df[form_df["result"] == result]
+            if not result_df.empty:
+                fig_form.add_trace(
+                    go.Bar(
+                        x=result_df["matchday"],
+                        y=result_df["points"],
+                        name=result,
+                        marker_color=color_map[result],
+                        customdata=result_df[["score", "expected_goals", "rolling_points_5"]],
+                        hovertemplate=(
+                            "<b>Matchday %{x}</b><br>"
+                            "Result: " + result + "<br>"
+                            "Points won: %{y}<br>"
+                            "Goals scored: %{customdata[0]:.0f}<br>"
+                            "xG: %{customdata[1]:.2f}<br>"
+                            "Rolling 5-match avg: %{customdata[2]:.2f}<extra></extra>"
+                        ),
+                    )
+                )
+
+        fig_form.add_trace(
+            go.Scatter(
+                x=form_df["matchday"],
+                y=form_df["rolling_points_5"],
+                mode="lines+markers",
+                name="Rolling 5-match avg",
+                line=dict(width=3),
+                hovertemplate=(
+                    "<b>Matchday %{x}</b><br>"
+                    "Rolling 5-match avg: %{y:.2f}<extra></extra>"
+                ),
+            )
+        )
+
+        fig_form.update_layout(
+            title=f"{selected_team} - Match-by-Match Form",
+            xaxis_title="Matchday",
+            yaxis_title="Points",
+            barmode="overlay",
+            legend_title="Result",
+            yaxis=dict(range=[0, 3.4]),
+            hovermode="x unified",
+        )
+
+        st.plotly_chart(fig_form, use_container_width=True)
+
+        st.caption(
+            "Bars show points won each game (3/1/0). The line shows momentum over the last 5 matches."
         )
     else:
         st.warning("No team form data available.")
 else:
     st.warning("No team data available for this league.")
 
+# -----------------------------------------------------------------------------
 # Player charts
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🎯 Player Performance")
 
@@ -111,7 +191,9 @@ with col2:
     else:
         st.warning("No player comparison data available.")
 
+# -----------------------------------------------------------------------------
 # Team comparison by season
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("📊 Team Comparison by Season")
 
@@ -155,7 +237,9 @@ if not team_stats_df.empty:
 else:
     st.warning("No team season data available.")
 
-# Home vs away section
+# -----------------------------------------------------------------------------
+# Home vs away
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🏟️ Home vs Away Analysis")
 
@@ -209,32 +293,46 @@ if not home_away_df.empty:
 else:
     st.warning("No home vs away data available.")
 
-# New section: heatmap
+# -----------------------------------------------------------------------------
+# Heatmap
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🔥 Team Metrics Heatmap")
 
 if not overview_df.empty:
     heatmap_df = overview_df.set_index("team_name")[
-    ["points", "expected_goals", "Ball_Possession", "Passes_pct", "Total_Shots", "Corner_Kicks"]
-]
+        [
+            "points",
+            "expected_goals",
+            "Ball_Possession",
+            "Passes_pct",
+            "Total_Shots",
+            "Corner_Kicks",
+        ]
+    ]
 
-# Normalize per column
-heatmap_norm = (heatmap_df - heatmap_df.min()) / (heatmap_df.max() - heatmap_df.min())
+    denom = (heatmap_df.max() - heatmap_df.min()).replace(0, 1)
+    heatmap_norm = (heatmap_df - heatmap_df.min()) / denom
 
-fig_heatmap = px.imshow(
-    heatmap_norm,
-    text_auto=".2f",
-    aspect="auto",
-    title="Team Performance Heatmap (Normalized)",
-)
+    fig_heatmap = px.imshow(
+        heatmap_norm,
+        text_auto=".2f",
+        aspect="auto",
+        title="Team Performance Heatmap (Normalized)",
+    )
 
-fig_heatmap.update_layout(
-    xaxis_title="Metric",
-    yaxis_title="Team",
-)
+    fig_heatmap.update_layout(
+        xaxis_title="Metric",
+        yaxis_title="Team",
+    )
 
-st.plotly_chart(fig_heatmap, use_container_width=True)
-# New section: radar chart
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+else:
+    st.warning("No overview data available.")
+
+# -----------------------------------------------------------------------------
+# Radar chart
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🕸️ Team Radar Comparison")
 
@@ -251,9 +349,18 @@ if not radar_df.empty:
             key="radar_team_2",
         )
 
-    metrics = ["Ball_Possession", "Passes_pct", "Total_Shots", "expected_goals", "Corner_Kicks"]
+    metrics = [
+        "Ball_Possession",
+        "Passes_pct",
+        "Total_Shots",
+        "expected_goals",
+        "Corner_Kicks",
+    ]
 
-    radar_filtered = radar_df[radar_df["team_name"].isin([radar_team_1, radar_team_2])].copy()
+    radar_filtered = radar_df[
+        radar_df["team_name"].isin([radar_team_1, radar_team_2])
+    ].copy()
+
     radar_long = radar_filtered.melt(
         id_vars="team_name",
         value_vars=metrics,
@@ -269,32 +376,37 @@ if not radar_df.empty:
         line_close=True,
         title=f"{radar_team_1} vs {radar_team_2} - Team Profile",
     )
+
     st.plotly_chart(fig_radar, use_container_width=True)
 else:
     st.warning("No radar chart data available.")
 
-# New section: box plot
-st.divider()
-st.subheader("📦 Points Distribution")
+# -----------------------------------------------------------------------------
+# Box plot
+# -----------------------------------------------------------------------------
+# st.divider()
+# st.subheader("📦 Points Distribution")
 
-if not points_dist_df.empty:
-    fig_box = px.box(
-        points_dist_df,
-        x="homeaway",
-        y="points",
-        color="homeaway",
-        title="Points Distribution: Home vs Away",
-    )
-    fig_box.update_layout(
-        xaxis_title="Venue",
-        yaxis_title="Points",
-        showlegend=False,
-    )
-    st.plotly_chart(fig_box, use_container_width=True)
-else:
-    st.warning("No points distribution data available.")
+# if not points_dist_df.empty:
+#     fig_box = px.box(
+#         points_dist_df,
+#         x="homeaway",
+#         y="points",
+#         color="homeaway",
+#         title="Points Distribution: Home vs Away",
+#     )
+#     fig_box.update_layout(
+#         xaxis_title="Venue",
+#         yaxis_title="Points",
+#         showlegend=False,
+#     )
+#     st.plotly_chart(fig_box, use_container_width=True)
+# else:
+#     st.warning("No points distribution data available.")
 
-# New section: bubble chart
+# -----------------------------------------------------------------------------
+# Bubble chart
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🫧 Team Efficiency Bubble Chart")
 
@@ -317,7 +429,9 @@ if not bubble_df.empty:
 else:
     st.warning("No bubble chart data available.")
 
+# -----------------------------------------------------------------------------
 # Player table
+# -----------------------------------------------------------------------------
 st.divider()
 st.subheader("🧾 Player Stats")
 
