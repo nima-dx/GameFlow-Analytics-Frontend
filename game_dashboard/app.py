@@ -10,6 +10,19 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+        .block-container {
+            max-width: 100% !important;
+            padding-left: 3rem;
+            padding-right: 3rem;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
