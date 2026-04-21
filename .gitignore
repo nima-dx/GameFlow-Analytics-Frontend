@@ -20,3 +20,4 @@ doctrees
 html
 *.gz
 .streamlit/secrets.toml
+/joaquin
