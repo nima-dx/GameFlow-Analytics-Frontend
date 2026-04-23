@@ -14,13 +14,17 @@ def load_data_calendar(season):
     query = f"""
         SELECT
             CASE WHEN strStatus = 'Match Finished' THEN 'Completed' ELSE 'Upcoming' END AS Status,
-            strEvent,
+            strEvent AS Event,
             strCountry AS Country,
-            CASE WHEN strVenue IS NULL THEN CONCAT(strCity, ' Circuit') ELSE strVenue END AS Circuit,
-            FORMAT_DATETIME('%-I%p %B %e, %Y', DATETIME(strTimestamp)) AS DateTime
+            CASE
+                WHEN strEvent = 'Las Vegas Grand Prix' THEN 'Las Vegas Strip Circuit'
+                WHEN strEvent = 'São Paulo Grand Prix' THEN 'Interlagos Circuit'
+                ELSE strVenue
+            END AS Circuit,
+            FORMAT_DATETIME('%-I%p %B %e', DATETIME(strTimestamp)) AS Date
         FROM `le-wagon-data-atelier.analytics_dataset.f1_calendar`
         WHERE EXTRACT(YEAR FROM dateEvent) = {season}
-        ORDER BY dateEvent DESC
+        ORDER BY dateEvent ASC
         LIMIT 1000
     """
     return client.query(query).to_dataframe()
@@ -45,24 +49,39 @@ def load_data_race_results(season):
 
 #idTeam
 @st.cache_data
-def load_data_championship(season):
+def load_data_drivers_championship(season):
     query = f"""
         SELECT
             ROW_NUMBER() OVER (ORDER BY SUM(intPoints) DESC) AS Position,
-            dr.Driver,
+            dr.Driver AS Driver,
             dr.Team,
             dr.Country,
-            SUM(intPoints) AS Points,
+            SUM(intPoints) AS Points
         FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results` rr
         JOIN `le-wagon-data-atelier.raw_dataset.drivers_2026` dr
         ON rr.strPlayer = dr.Driver
         WHERE strSeason = {season}
         GROUP BY dr.Driver, dr.Team, dr.Country
-        ORDER BY Points DESC
+        ORDER BY Position ASC
         LIMIT 1000
     """
     return client.query(query).to_dataframe()
 
+def load_data_team_championship(season):
+    query = f"""
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY SUM(intPoints) DESC) AS Position,
+            dr.Team,
+            SUM(intPoints) AS Points
+        FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results` rr
+        JOIN `le-wagon-data-atelier.raw_dataset.drivers_2026` dr
+        ON rr.strPlayer = dr.Driver
+        WHERE strSeason = {season}
+        GROUP BY dr.Team
+        ORDER BY Position ASC
+        LIMIT 1000
+    """
+    return client.query(query).to_dataframe()
 
 
 
@@ -71,7 +90,7 @@ def load_data_championship(season):
 season = 2026
 
 calendar_df = load_data_calendar(season)
-championship_df = load_data_championship(season)
+championship_df = load_data_drivers_championship(season)
 race_results_df = load_data_race_results(season)
 
 
@@ -94,10 +113,10 @@ st.divider()
 k1, k2, k3, k4 = st.columns(4)
 
 with k1:
-    st.metric("Races", calendar_df["strEvent"].nunique())
+    st.metric("Races", calendar_df["Event"].nunique())
 
 with k2:
-    st.metric("Circuits", calendar_df["strEvent"].nunique())
+    st.metric("Circuits", calendar_df["Event"].nunique())
 
 with k3:
     st.metric("Teams", championship_df["Team"].nunique())
@@ -115,20 +134,23 @@ st.divider()
 
 
 # --- F1 Header
-st.header("📅 Season Calendar 📅")
+st.header("📅 2026 Season Calendar 📅")
 
 # --- Season filter ---
 
-# Bug 1 fixed: filter on 'Status' (the alias), not 'strStatus'
 completed = calendar_df[calendar_df['Status'] == "Completed"]
 upcoming = calendar_df[calendar_df['Status'] == "Upcoming"]
+completed = completed[['Event', 'Circuit', 'Date']]
+upcoming = upcoming[['Event', 'Circuit', 'Date']]
+
 
 # --- F1 Calendar Subheader Completed
 # Bug 2 fixed: added f prefix to f-strings
-st.subheader(f"Completed Races of {season}")
-st.dataframe(completed, hide_index=True)
+st.write(f"Completed Races of {season}")
+st.dataframe(completed, hide_index=True,)
+
 
 # --- F1 Calendar Subheader Upcoming
 # Bug 3 fixed: corrected label and dataframe to 'upcoming'
-st.subheader(f"Upcoming Races of {season}")
+st.write(f"Upcoming Races of {season}")
 st.dataframe(upcoming, hide_index=True)
