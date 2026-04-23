@@ -14,7 +14,8 @@ dependencies = [
     "pandas>=2.0.0",
     "altair>=5.0.0",
     "numpy (>=2.4.4,<3.0.0)",
-    "plotly (>=6.7.0,<7.0.0)"
+    "plotly (>=6.7.0,<7.0.0)",
+    "ipykernel (>=7.2.0,<8.0.0)"
 ]
 
 

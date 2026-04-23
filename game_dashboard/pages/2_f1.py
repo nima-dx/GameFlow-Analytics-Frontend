@@ -35,7 +35,7 @@ def load_data_race_results(season):
             strPlayer as Driver,
             strDetail,
             intPoints,
-            strEvent
+            strEvent,
         FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results`
         WHERE strSeason = {season}
         LIMIT 1000
@@ -43,35 +43,81 @@ def load_data_race_results(season):
     return client.query(query).to_dataframe()
 
 
-
+#idTeam
 @st.cache_data
 def load_data_championship(season):
     query = f"""
         SELECT
-            strPlayer,
-            SUM(intPoints) AS intPoints
-        FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results`
+            ROW_NUMBER() OVER (ORDER BY SUM(intPoints) DESC) AS Position,
+            dr.Driver,
+            dr.Team,
+            dr.Country,
+            SUM(intPoints) AS Points,
+        FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results` rr
+        JOIN `le-wagon-data-atelier.raw_dataset.drivers_2026` dr
+        ON rr.strPlayer = dr.Driver
         WHERE strSeason = {season}
-        GROUP BY strPlayer
-        ORDER BY intPoints DESC
+        GROUP BY dr.Driver, dr.Team, dr.Country
+        ORDER BY Points DESC
         LIMIT 1000
     """
     return client.query(query).to_dataframe()
+
+
+
+
+##### BACKEND ######
+# season = st.selectbox("Select Season", options=[2026], index=0)
+season = 2026
+
+calendar_df = load_data_calendar(season)
+championship_df = load_data_championship(season)
+race_results_df = load_data_race_results(season)
 
 
 
 
 ### PAGE LAYOUT STARTS HERE ###
+if st.button("Clear cache"):
+    st.cache_data.clear()
 
 st.title("🏎️ F1 Dashboard")
 
+
+
+st.divider()
+
+# Load Data
+
+
+# Top KPIs
+k1, k2, k3, k4 = st.columns(4)
+
+with k1:
+    st.metric("Races", calendar_df["strEvent"].nunique())
+
+with k2:
+    st.metric("Circuits", calendar_df["strEvent"].nunique())
+
+with k3:
+    st.metric("Teams", championship_df["Team"].nunique())
+
+with k4:
+    st.metric("Drivers", championship_df["Driver"].nunique())
+
+st.divider()
+
+
+st.header(f"🏆 {season} Championship Standings 🏆")
+st.dataframe(championship_df, hide_index=True)
+
+st.divider()
+
+
 # --- F1 Header
-st.header("Season Calendar 📅")
+st.header("📅 Season Calendar 📅")
 
 # --- Season filter ---
-season = st.selectbox("Select Season", options=[2024, 2025, 2026], index=2)
-
-calendar_df = load_data_calendar(season)
 
 # Bug 1 fixed: filter on 'Status' (the alias), not 'strStatus'
 completed = calendar_df[calendar_df['Status'] == "Completed"]
@@ -86,11 +132,3 @@ st.dataframe(completed, hide_index=True)
 # Bug 3 fixed: corrected label and dataframe to 'upcoming'
 st.subheader(f"Upcoming Races of {season}")
 st.dataframe(upcoming, hide_index=True)
-
-
-
-# --- F1 Header
-st.header(f"{season} Championship Results 🏆")
-
-championship_df = load_data_championship(season)
-st.dataframe(championship_df, hide_index=True)
