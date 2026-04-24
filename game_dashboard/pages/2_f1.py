@@ -1,13 +1,18 @@
 import streamlit as st
-from google.cloud import bigquery
+from data.bigquery_client import get_bq_client
 from google.oauth2 import service_account
 import pandas as pd
+import plotly.express as px
+
 
 # Connect
-credentials = service_account.Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"]
-)
-client = bigquery.Client(credentials=credentials, project="le-wagon-data-atelier")
+# credentials = service_account.Credentials.from_service_account_info(
+#     st.secrets["gcp_service_account"]
+# )
+# client = bigquery.Client(credentials=credentials, project="le-wagon-data-atelier")
+
+client = get_bq_client()
+
 
 @st.cache_data
 def load_data_calendar(season):
@@ -84,6 +89,65 @@ def load_data_team_championship(season):
     return client.query(query).to_dataframe()
 
 
+def point_evolution_drivers(season):
+
+    query = f"""
+        WITH race_data AS (
+            SELECT
+                strEvent AS Event,
+                strPlayer AS Driver,
+                dr.Team AS Team,
+                intPoints AS Points,
+                dateEvent AS EventDate
+            FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results` rr
+            JOIN `le-wagon-data-atelier.raw_dataset.drivers_2026` dr
+                ON rr.strPlayer = dr.Driver
+            WHERE strSeason = {season}
+        )
+
+        SELECT
+            Event,
+            EventDate,
+            Driver,
+            SUM(Points) AS Points_This_Race,
+            SUM(SUM(Points)) OVER (
+                PARTITION BY Driver
+                ORDER BY EventDate
+            ) AS Cumulative_Points
+        FROM race_data
+        GROUP BY Driver, Event, EventDate
+        ORDER BY EventDate ASC, Cumulative_Points DESC
+    """
+    return client.query(query).to_dataframe()
+
+def points_evolution_teams(season):
+    query = f"""
+        WITH race_data AS (
+            SELECT
+                strEvent AS Event,
+                dr.Team AS Team,
+                intPoints AS Points,
+                dateEvent AS EventDate
+            FROM `le-wagon-data-atelier.analytics_dataset.f1_race_results` rr
+            JOIN `le-wagon-data-atelier.raw_dataset.drivers_2026` dr
+                ON rr.strPlayer = dr.Driver
+            WHERE strSeason = {season}
+        )
+
+        SELECT
+            Event,
+            EventDate,
+            Team,                              -- ← added missing comma
+            SUM(Points) AS Points_This_Race,
+            SUM(SUM(Points)) OVER (
+                PARTITION BY Team              -- ← was Driver, should be Team
+                ORDER BY EventDate
+            ) AS Cumulative_Points
+        FROM race_data
+        GROUP BY Team, Event, EventDate
+        ORDER BY EventDate ASC, Cumulative_Points DESC
+    """
+    return client.query(query).to_dataframe()
 
 ##### BACKEND ######
 # season = st.selectbox("Select Season", options=[2026], index=0)
@@ -92,8 +156,26 @@ season = 2026
 calendar_df = load_data_calendar(season)
 championship_df = load_data_drivers_championship(season)
 race_results_df = load_data_race_results(season)
+team_championship_df = load_data_team_championship(season)
+points_evolution_drivers_df = point_evolution_drivers(season)
+points_evolution_teams_df = points_evolution_teams(season)
 
 
+
+
+round_zero = pd.DataFrame({
+    "Driver": points_evolution_teams_df["Team"].unique(),
+    "Event": "Start",
+    "EventDate": pd.Timestamp("1900-01-01"),  # ← use a real early date instead of Timestamp.min
+    "Cumulative_Points": 0
+})
+
+points_evolution_drivers_df = (
+    pd.concat([round_zero, points_evolution_teams_df])
+    .assign(EventDate=lambda df: pd.to_datetime(df["EventDate"]))  # ← normalize the column
+    .sort_values(["Driver", "EventDate"])
+    .reset_index(drop=True)
+)
 
 
 ### PAGE LAYOUT STARTS HERE ###
@@ -110,10 +192,13 @@ st.divider()
 
 
 # Top KPIs
-k1, k2, k3, k4 = st.columns(4)
+k1, k5, k2, k3, k4,  = st.columns(5)
 
 with k1:
     st.metric("Races", calendar_df["Event"].nunique())
+
+with k5:
+    st.metric("Races Completed", calendar_df[calendar_df["Status"] == "Completed"]["Event"].nunique())
 
 with k2:
     st.metric("Circuits", calendar_df["Event"].nunique())
@@ -127,8 +212,15 @@ with k4:
 st.divider()
 
 
-st.header(f"🏆 {season} Championship Standings 🏆")
-st.dataframe(championship_df, hide_index=True)
+view = st.radio("Championship", ["Drivers", "Constructors"], horizontal=True)
+
+if view == "Drivers":
+    st.header(f"🏆 {season} Championship Standings 🏆")
+    st.dataframe(championship_df, hide_index=True)
+else:
+    st.header(f"🏆 {season} Constructor Championship Standings 🏆")
+    st.dataframe(team_championship_df, hide_index=True,)
+
 
 st.divider()
 
@@ -154,3 +246,33 @@ st.dataframe(completed, hide_index=True,)
 # Bug 3 fixed: corrected label and dataframe to 'upcoming'
 st.write(f"Upcoming Races of {season}")
 st.dataframe(upcoming, hide_index=True)
+
+
+st.divider()
+
+# Sort by date so events are in the right order
+points_evolution_drivers_df = points_evolution_drivers_df.sort_values("EventDate")
+
+# Lock the x-axis order to match chronological order
+event_order = points_evolution_drivers_df["Event"].unique().tolist()
+
+fig = px.line(
+    points_evolution_drivers_df,
+    x="Event",
+    y="Cumulative_Points",
+    color="Team",
+    title="Teams Championship — Cumulative Points",
+    markers=True,
+    category_orders={"Event": event_order},  # ← forces chronological order
+    labels={
+        "Event": "Race",
+        "Cumulative_Points": "Points",
+    }
+)
+
+fig.update_layout(
+    xaxis_tickangle=-45,
+    legend_title="Team",
+)
+
+st.plotly_chart(fig, use_container_width=True)
